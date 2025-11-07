@@ -3,7 +3,7 @@
 for i in {1..10}
 do
     echo "$i sec"
-    sleep 1
+    sleep 10
 done
 
 echo "Done!"

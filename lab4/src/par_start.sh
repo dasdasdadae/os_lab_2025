@@ -1,0 +1,1 @@
+./exec/parallel_min_max --seed 123 --array_size 100000000 --pnum 4 --timeout 2

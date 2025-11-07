@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>      
+#include <signal.h> 
 
 #include <sys/time.h>
 #include <sys/types.h>
@@ -15,11 +17,44 @@
 #include "find_min_max.h"
 #include "utils.h"
 
+//  Глобальные переменные состояния для функции обработки сигнала 
+pid_t *global_pids = NULL;
+int global_pnum = 0;
+int global_timeout_seconds = -1;
+
+// ФУНКЦИЯ-ОБРАБОТЧИК (Будет вызвана по SIGALRM)
+void timeout_handler(int signum) {
+    if (signum == SIGALRM) {
+        printf("\n Родитель (PID %d): Тайм-аут (%d с) истек! Отправка SIGKILL всем детям...\n", getpid(), global_timeout_seconds > 0 ? global_timeout_seconds : 0);
+        
+        for (int i = 0; i < global_pnum; i++) {
+            if (global_pids[i] > 0) {
+                // Отправка SIGKILL
+                if (kill(global_pids[i], SIGKILL) == 0) {
+                    printf("  -> SIGKILL отправлен дочернему процессу %d.\n", global_pids[i]);
+                } else {
+                    // Если kill не удался, процесс уже мог завершиться
+                    if (errno == ESRCH) {
+                        printf("  -> Дочерний процесс %d уже завершился.\n", global_pids[i]);
+                    } else {
+                        perror("kill failed");
+                    }
+                }
+            }
+        }
+        
+        // Немедленное и безопасное завершение родительского процесса
+        _exit(1); // Завершаемся с ошибкой (1), так как работа не была выполнена
+    }
+}
+
 int main(int argc, char **argv) {
   int seed = -1;
   int array_size = -1;
   int pnum = -1;
   bool with_files = false;
+// Инициализируем переменную для timeout -1
+  int timeout_seconds = -1;
 
   int **pipefd = NULL;
   if (!with_files) {
@@ -33,12 +68,15 @@ int main(int argc, char **argv) {
   while (true) {
     int current_optind = optind ? optind : 1;
 
-    static struct option options[] = {{"seed", required_argument, 0, 0},
-                                      {"array_size", required_argument, 0, 0},
-                                      {"pnum", required_argument, 0, 0},
-                                      {"by_files", no_argument, 0, 'f'},
-                                      {0, 0, 0, 0}};
-
+static struct option options[] = {
+            {"seed", required_argument, 0, 0},
+            {"array_size", required_argument, 0, 0},
+            {"pnum", required_argument, 0, 0},
+            {"by_files", no_argument, 0, 'f'},
+            // Добавляем --timeout 
+            {"timeout", required_argument, 0, 0}, 
+            {0, 0, 0, 0}
+        };
     int option_index = 0;
     int c = getopt_long(argc, argv, "f", options, &option_index);
 
@@ -73,6 +111,14 @@ int main(int argc, char **argv) {
             break;
           default:
             printf("Index %d is out of options\n", option_index);
+          // Обработка --timeout (option_index = 4) 
+          case 4:  
+              timeout_seconds = atoi(optarg);
+              if (timeout_seconds <= 0) {
+                  printf("Error: timeout must be a positive number\n");
+                  return 1;
+              }
+              break;
         }
         break;
       case 'f':
@@ -100,6 +146,15 @@ int main(int argc, char **argv) {
   GenerateArray(array, array_size, seed);
   int active_child_processes = 0;
 
+// Инициализация глобального массива PID 
+  if (pnum > 0) {
+      global_pids = malloc(sizeof(pid_t) * pnum);
+      global_pnum = pnum;
+  }
+  if (timeout_seconds > 0){
+    global_timeout_seconds = timeout_seconds;
+  }
+  
   struct timeval start_time;
   gettimeofday(&start_time, NULL);
 
@@ -154,11 +209,28 @@ int main(int argc, char **argv) {
     }
   }
 
+// Установка таймера и обработчика ---
+  if (timeout_seconds > 0) {
+      if (signal(SIGALRM, timeout_handler) == SIG_ERR) {
+          perror("signal error");
+          // Продолжаем, но без таймера
+      } else {
+          alarm(timeout_seconds);
+          printf("Parent: Таймер запущен на %d секунд.\n", timeout_seconds);
+      }
+  }
   // Ждем завершения всех детей
   while (active_child_processes > 0) {
     wait(NULL);
     active_child_processes -= 1;
   }
+
+//  Отмена таймера и очистка PID
+    if (timeout_seconds > 0) {
+        alarm(0); // Отменяем таймер, если все дети завершились нормально
+    }
+    free(global_pids);
+
 
   struct MinMax min_max;
   min_max.min = INT_MAX;

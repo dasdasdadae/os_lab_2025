@@ -1,0 +1,6 @@
+*.o
+*.gch
+swap
+hello_world
+example.txt
+a.out
