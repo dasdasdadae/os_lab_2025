@@ -40,10 +40,10 @@ $(BIN_DIR)/process_memory.o: $(LAB4_DIR)/process_memory.c | $(BIN_DIR)
 
 # Программа parallel_sum
 $(EXEC_DIR)/parallel_sum: $(BIN_DIR)/parallel_sum.o $(BIN_DIR)/utils.o | $(EXEC_DIR)
-	$(CC) $(LDFLAGS) -pthread -o $@ $^
+	$(CC) $(LDFLAGS) -o $@ $^
 
 $(BIN_DIR)/parallel_sum.o: parallel_sum.c | $(BIN_DIR)
-	$(CC) $(CFLAGS) -I$(LAB3_DIR) -pthread -c -o $@ $<
+	$(CC) $(CFLAGS) -I$(LAB3_DIR) -c -o $@ $<
 
 # Очистка
 clean:
