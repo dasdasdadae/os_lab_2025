@@ -39,10 +39,13 @@ $(BIN_DIR)/process_memory.o: $(LAB4_DIR)/process_memory.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 # Программа parallel_sum
-$(EXEC_DIR)/parallel_sum: $(BIN_DIR)/parallel_sum.o $(BIN_DIR)/utils.o | $(EXEC_DIR)
-	$(CC) $(LDFLAGS) -o $@ $^
+$(EXEC_DIR)/parallel_sum: $(BIN_DIR)/parallel_sum.o $(BIN_DIR)/utils.o $(BIN_DIR)/sum_lib.o | $(EXEC_DIR)
+	$(CC) $(LDFLAGS) -pthread -o $@ $^
 
 $(BIN_DIR)/parallel_sum.o: parallel_sum.c | $(BIN_DIR)
+	$(CC) $(CFLAGS) -I$(LAB3_DIR) -c -o $@ $<
+
+$(BIN_DIR)/sum_lib.o: sum_lib.c | $(BIN_DIR)
 	$(CC) $(CFLAGS) -I$(LAB3_DIR) -c -o $@ $<
 
 # Очистка

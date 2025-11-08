@@ -1,79 +1,62 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <pthread.h>
+#include <time.h>
 
 #include "../../lab3/src/utils.h"
-#include <pthread.h>
-
-struct SumArgs {
-  int *array;
-  int begin;
-  int end;
-};
-
-int Sum(const struct SumArgs *args) {
-  int sum = 0;
-  for (int i = args->begin; i < args->end; i++) {
-    sum += args->array[i];  
-  }
-  return sum;
-}
-
-void *ThreadSum(void *args) {
-  struct SumArgs *sum_args = (struct SumArgs *)args;
-  return (void *)(size_t)Sum(sum_args);
-}
+#include "sum_lib.h"
 
 int main(int argc, char **argv) {
-  uint32_t threads_num = 0;
-  uint32_t array_size = 0;
-  uint32_t seed = 0;
+    uint32_t threads_num = 0;
+    uint32_t array_size = 0;
+    uint32_t seed = 0;
 
-  if (argc == 4) {
-    threads_num = atoi(argv[1]);
-    array_size = atoi(argv[2]);
-    seed = atoi(argv[3]);
-  } else {
-    fprintf(stderr, "Ошибка: Ожидается 3 позиционных аргумента.\n");
-    fprintf(stderr, "Использование: %s <num_threads> <array_size> <seed>\n", argv[0]);
-    return 1;
-  }
-
-  pthread_t threads[threads_num];
-
-  int *array = malloc(sizeof(int) * array_size);
-  GenerateArray(array, array_size, seed);
-
-  // Вычисляем размер части массива для каждого потока
-  int chunk_size = array_size / threads_num;
-  
-  struct SumArgs args[threads_num];
-  for (uint32_t i = 0; i < threads_num; i++) {
-    // Инициализируем параметры для каждого потока
-    args[i].array = array;
-    args[i].begin = i * chunk_size;
-    if (i == threads_num - 1) {
-        // Последний поток получает все оставшиеся элементы
-        args[i].end = array_size;
-    } else {
-        // Обычные потоки получают ровный кусок
-        args[i].end = (i + 1) * chunk_size;
+    // Парсинг аргументов командной строки
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--threads_num") == 0 && i + 1 < argc) {
+            threads_num = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--array_size") == 0 && i + 1 < argc) {
+            array_size = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--seed") == 0 && i + 1 < argc) {
+            seed = atoi(argv[++i]);
+        }
     }
-    
-    if (pthread_create(&threads[i], NULL, ThreadSum, (void *)&args[i])) {
-      printf("Error: pthread_create failed!\n");
-      return 1;
+
+    // Проверка корректности аргументов
+    if (threads_num == 0 || array_size == 0) {
+        fprintf(stderr, "Ошибка: Неверные аргументы.\n");
+        fprintf(stderr, "Использование: %s --threads_num <num> --array_size <num> --seed <num>\n", argv[0]);
+        return 1;
     }
-  }
 
-  int total_sum = 0;
-  for (uint32_t i = 0; i < threads_num; i++) {
-    int sum = 0;
-    pthread_join(threads[i], (void **)&sum);
-    total_sum += sum;
-  }
+    // Генерация массива (не входит в замер времени)
+    int *array = malloc(sizeof(int) * array_size);
+    if (array == NULL) {
+        fprintf(stderr, "Ошибка: Не удалось выделить память для массива.\n");
+        return 1;
+    }
+    GenerateArray(array, array_size, seed);
 
-  free(array);
-  printf("Total: %d\n", total_sum);
-  return 0;
+    // Замер времени начала вычислений
+    struct timespec start, finish;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    // Параллельное вычисление суммы
+    int total_sum = ParallelSum(array, array_size, threads_num);
+
+    // Замер времени окончания вычислений
+    clock_gettime(CLOCK_MONOTONIC, &finish);
+
+    // Вычисление времени выполнения
+    double elapsed_time = (finish.tv_sec - start.tv_sec);
+    elapsed_time += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
+
+    // Вывод результатов
+    printf("Total sum: %d\n", total_sum);
+    printf("Elapsed time: %.6f seconds\n", elapsed_time);
+
+    free(array);
+    return 0;
 }
